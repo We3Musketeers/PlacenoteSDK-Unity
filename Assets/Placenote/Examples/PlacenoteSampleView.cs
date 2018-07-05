@@ -57,7 +57,7 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploa
 	private List<GameObject> shapeObjList = new List<GameObject> ();
 	private LibPlacenote.MapMetadataSettable mCurrMapDetails;
 
-	private bool mReportDebug = false;
+	private bool mReportDebug = true;
 
 	private LibPlacenote.MapInfo mSelectedMapInfo;
 	private string mSelectedMapId {
@@ -86,7 +86,7 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploa
 		FeaturesVisualizer.EnablePointcloud ();
 		LibPlacenote.Instance.RegisterListener (this);
 		LibPlacenote.Instance.RegisterResumeUploadListener (this);
-		mRadiusSlider.value = 1.0f;
+		ResetSlider ();
 	}
 
 
@@ -140,7 +140,8 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploa
 			Vector3 arkitPosition = PNUtility.MatrixOps.GetPosition (matrix);
 			Quaternion arkitQuat = PNUtility.MatrixOps.GetRotation (matrix);
 
-			LibPlacenote.Instance.SendARFrame (mImage, arkitPosition, arkitQuat, mARCamera.videoParams.screenOrientation);
+			LibPlacenote.Instance.SendARFrame (mImage, arkitPosition, arkitQuat,
+				mARCamera.videoParams.screenOrientation, mARCamera.pointCloudData);
 		}
 	}
 
@@ -177,15 +178,15 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploa
 		Debug.Log ("Map search:" + mRadiusSlider.value.ToString("F2"));
 		LocationInfo locationInfo = Input.location.lastData;
 
-		foreach (Transform t in mListContentParent.transform) {
-			Destroy (t.gameObject);
-		}
 
 		float radiusSearch = mRadiusSlider.value * mMaxRadiusSearch;
 		mRadiusLabel.text = "Distance Filter: " + (radiusSearch / 1000.0).ToString ("F2") + " km";
 
 		LibPlacenote.Instance.SearchMaps(locationInfo.latitude, locationInfo.longitude, radiusSearch, 
 			(mapList) => {
+			foreach (Transform t in mListContentParent.transform) {
+				Destroy (t.gameObject);
+			}
 			// render the map list!
 			foreach (LibPlacenote.MapInfo mapId in mapList) {
 				if (mapId.metadata.userdata != null) {
@@ -196,11 +197,17 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploa
 		});
 	}
 
+	public void ResetSlider() {
+		mRadiusSlider.value = 1.0f;
+		mRadiusLabel.text = "Distance Filter: Off";
+	}
+
 	public void OnCancelClick ()
 	{
 		mMapSelectedPanel.SetActive (false);
 		mMapListPanel.SetActive (false);
 		mInitButtonPanel.SetActive (true);
+		ResetSlider ();
 	}
 
 
@@ -246,6 +253,7 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploa
 			return;
 		}
 
+		ResetSlider ();
 		mLabelText.text = "Loading Map ID: " + mSelectedMapId;
 		LibPlacenote.Instance.LoadMap (mSelectedMapId,
 			(completed, faulted, percentage) => {
@@ -411,6 +419,7 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploa
 					metadata.location.longitude = locationInfo.longitude;
 					metadata.location.altitude = locationInfo.altitude;
 				}
+
 				LibPlacenote.Instance.SetMetadata (mapId, metadata);
 				mCurrMapDetails = metadata;
 			},
@@ -505,7 +514,9 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploa
 	}
 
 
+	public void OnInitialized (bool success, string errMsg) {}
 	public void OnPose (Matrix4x4 outputPose, Matrix4x4 arkitPose) {}
+	public void OnDensePointcloud (LibPlacenote.PNFeaturePointUnity[] ptcloud) {}
 
 
 	public void OnStatusChange (LibPlacenote.MappingStatus prevStatus, LibPlacenote.MappingStatus currStatus)

@@ -75,6 +75,17 @@ public class LibPlacenote : MonoBehaviour
 		ref PNTransformUnity arkitPose, IntPtr context);
 
 	/// <summary>
+	/// Delegate template for a callback for the Placenote Mapping engine to notify user of a message
+	/// </summary>
+	/// <param name="msg">
+	/// The message Placenote Mapping engine tries to pass back
+	/// </param>
+	/// <param name="context">
+	/// Pointer used to pass C# context to/from the C environment, since C callback function can't capture external states
+	/// </param>
+	public delegate void PNNotifcationCallback (string msg, IntPtr context);
+
+	/// <summary>
 	/// Struct that captures the intrinsic calibration parameters of a pinhole model camera.
 	/// </summary>
 	[StructLayout (LayoutKind.Sequential)]
@@ -151,6 +162,7 @@ public class LibPlacenote : MonoBehaviour
 		public int measCount;
 		public float maxViewAngle;
 		public PNVector3Unity point;
+		public PNVector3Unity color;
 	}
 
 	/// <summary>
@@ -383,6 +395,7 @@ public class LibPlacenote : MonoBehaviour
 		public List<PNTransformUnity> cameraPoses;
 	}
 
+	private string mInitResultErrMsg;
 	private static LibPlacenote sInstance;
 	private List<PlacenoteListener> listeners = new List<PlacenoteListener> ();
 	private List<ResumeUploadListener> uploadListeners = new List<ResumeUploadListener>();
@@ -441,6 +454,9 @@ public class LibPlacenote : MonoBehaviour
 	public void RegisterListener (PlacenoteListener listener)
 	{
 		listeners.Add (listener);
+		if (mInitialized) {
+			listener.OnInitialized (true, "");
+		}
 	}
 
 	/// <summary>
@@ -449,7 +465,9 @@ public class LibPlacenote : MonoBehaviour
 	/// <param name="listener">A listener to be removed to the subscriber list.</param>
 	public void RemoveListener (PlacenoteListener listener)
 	{
-		listeners.Remove (listener);
+		if (listeners.Contains(listener)) {
+			listeners.Remove (listener);
+		}
 	}
 		
 	/// <summary>
@@ -482,14 +500,22 @@ public class LibPlacenote : MonoBehaviour
 	static void OnInitialized (ref PNCallbackResultUnity result, IntPtr context)
 	{
 		bool success = result.success;
+		string msg = result.msg;
 
 		if (success) {
 			Debug.Log ("Initialized SDK!");
 			Instance.mInitialized = true;
 		} else {
 			Debug.Log ("Failed to initialize SDK!");
-			Debug.Log ("error message: " + result.msg);
+			Debug.Log ("error message: " + msg);
 		}
+
+		MainThreadTaskQueue.InvokeOnMainThread (() => {
+			var listeners = Instance.listeners;
+			foreach (var listener in listeners) {
+				listener.OnInitialized (success, msg);
+			}
+		});
 	}
 
 	/// <summary>
@@ -646,6 +672,83 @@ public class LibPlacenote : MonoBehaviour
 		#endif
 	}
 
+
+	/// <summary>
+	/// Sends an image frame and its corresponding camera pose to LibPlacenote mapping/localization module
+	/// </summary>
+	/// <param name="frameData">Image frame data.</param>
+	/// <param name="position">Position of the camera at the time frameData is captured</param>
+	/// <param name="rotation">Quaternion of the camera at the time frameData is captured.</param>
+	/// <param name="screenOrientation">
+	/// Fill in this parameter with screenOrientation from the current UnityVideoParams structure.
+	/// Used to correct for the extra rotation applied by the Unity ARKit Plugin on the ARKit pose transform.
+	/// </param>
+	/// <param name="pts">points detected by ARKit</param>
+	public void SendARFrame (UnityARImageFrameData frameData, Vector3 position, Quaternion rotation, int screenOrientation, Vector3[] pts)
+	{
+		Matrix4x4 orientRemovalMat = Matrix4x4.zero;
+		orientRemovalMat.m22 = orientRemovalMat.m33 = 1;
+		switch (screenOrientation) {
+		// portrait
+		case 1:
+			orientRemovalMat.m01 = 1;
+			orientRemovalMat.m10 = -1;
+			break;
+		case 2:
+			orientRemovalMat.m01 = -1;
+			orientRemovalMat.m10 = 1;
+			break;
+			// landscape
+		case 3:
+			// do nothing
+			orientRemovalMat = Matrix4x4.identity;
+			break;
+		case 4:
+			orientRemovalMat.m00 = -1;
+			orientRemovalMat.m11 = -1;
+			break;
+		default:
+			Debug.LogError ("Unrecognized screen orientation");
+			return;
+		}
+
+		Matrix4x4 rotationMat = Matrix4x4.TRS (new Vector3 (0, 0, 0), rotation, new Vector3 (1, 1, 1));
+		rotationMat = rotationMat * orientRemovalMat;
+		rotation = PNUtility.MatrixOps.QuaternionFromMatrix (rotationMat);
+
+		PNTransformUnity pose = new PNTransformUnity ();
+		pose.position.x = position.x;
+		pose.position.y = position.y;
+		pose.position.z = position.z;
+		pose.rotation.x = rotation.x;
+		pose.rotation.y = rotation.y;
+		pose.rotation.z = rotation.z;
+		pose.rotation.w = rotation.w;
+
+		PNImagePlaneUnity yPlane = new PNImagePlaneUnity ();
+		yPlane.width = (int)frameData.y.width;
+		yPlane.height = (int)frameData.y.height;
+		yPlane.stride = (int)frameData.y.stride;
+		yPlane.buf = frameData.y.data;
+
+		PNImagePlaneUnity vuPlane = new PNImagePlaneUnity ();
+		vuPlane.width = (int)frameData.vu.width;
+		vuPlane.height = (int)frameData.vu.height;
+		vuPlane.stride = (int)frameData.vu.stride;
+		vuPlane.buf = frameData.vu.data;
+
+		PNVector3Unity[] pnPts = new PNVector3Unity[pts.Length];
+		for (int i = 0; i < pts.Length; i++) {
+			pnPts[i].x = pts [i].x;
+			pnPts[i].y = -pts [i].y;
+			pnPts[i].z = pts [i].z;
+		}
+
+		#if !UNITY_EDITOR
+		PNSetFrameWithPoints (ref yPlane, ref vuPlane, ref pose, pnPts, pnPts.Length);
+		#endif
+	}
+
 	/// <summary>
 	/// Gets the current pose computed by the mapping session
 	/// </summary>
@@ -701,9 +804,9 @@ public class LibPlacenote : MonoBehaviour
 
 		MappingStatus status = Instance.GetStatus();
 
-		var listeners = Instance.listeners;
 		if (status == MappingStatus.RUNNING) {
 			MainThreadTaskQueue.InvokeOnMainThread (() => {
+				var listeners = Instance.listeners;
 				foreach (var listener in listeners) {
 					listener.OnPose (outputPoseMat, arkitPoseMat);
 				}
@@ -713,6 +816,7 @@ public class LibPlacenote : MonoBehaviour
 
 		if (status != Instance.mPrevStatus) {
 			MainThreadTaskQueue.InvokeOnMainThread (() => {
+				var listeners = Instance.listeners;
 				foreach (var listener in listeners) {
 					listener.OnStatusChange (Instance.mPrevStatus, status);
 				}
@@ -1349,6 +1453,78 @@ public class LibPlacenote : MonoBehaviour
 	}
 
 
+	[MonoPInvokeCallback (typeof(PNNotifcationCallback))]
+	private static void OnNewPtcloudNotification (string msg, IntPtr context)
+	{
+		string errorMsg = msg;
+		Debug.Log ("OnNewPtcloudNotification: " + errorMsg);
+
+		LibPlacenote.PNFeaturePointUnity[] densePts = LibPlacenote.Instance.GetDenseMap ();
+		if (densePts == null) {
+			return;
+		}
+
+		MainThreadTaskQueue.InvokeOnMainThread (() => {
+			var listeners = Instance.listeners;
+			foreach (var listener in listeners) {
+				listener.OnDensePointcloud (densePts);
+			}
+		});
+	}
+
+
+	/// <summary>
+	/// Enable dense mapping capability of Placenote mapping engine. OnDensePointcloud callback will start
+	/// getting triggered to broadcast the pointcloud data
+	/// </summary>
+	public void EnableDenseMapping()
+	{
+		#if !UNITY_EDITOR
+		PNEnableDenseMapping (OnNewPtcloudNotification, IntPtr.Zero);
+		#endif
+	}
+
+	/// <summary>
+	/// Disable dense mapping capability of Placenote mapping engine. OnDensePointcloud callback will stop
+	/// getting triggered if dense mapping has previously been enabled
+	/// </summary>
+	public void DisableDenseMapping()
+	{
+		#if !UNITY_EDITOR
+		PNDisableDenseMapping ();
+		#endif
+	}
+
+
+	/// <summary>
+	/// Return the map created by a mapping session, or the current map used by a localization session
+	/// </summary>
+	/// <returns>
+	/// The map that contains all 3D feature points created by a mapping session,
+	/// or contained in a loaded map during a localization session
+	/// </returns>
+	public PNFeaturePointUnity[] GetDenseMap ()
+	{
+		int lmSize = 0;
+		PNFeaturePointUnity[] map = new PNFeaturePointUnity [1];
+		#if !UNITY_EDITOR
+		lmSize = PNGetDenseMap (map, 0);
+		#endif
+
+		if (lmSize == 0) {
+			Debug.Log ("Empty landmarks, probably tried to fail");
+			return null;
+		}
+
+		#if !UNITY_EDITOR
+		Array.Resize (ref map, lmSize);
+		PNGetDenseMap (map, lmSize);
+		#endif
+
+		return map;
+	}
+
+
 	/// <summary>
 	/// Return the map created by a mapping session, or the current map used by a localization session
 	/// </summary>
@@ -1426,6 +1602,13 @@ public class LibPlacenote : MonoBehaviour
 
 	[DllImport ("__Internal")]
 	[return: MarshalAs (UnmanagedType.I4)]
+	private static extern void PNSetFrameWithPoints (
+		ref PNImagePlaneUnity yPlane, ref PNImagePlaneUnity vuPlane,
+		ref PNTransformUnity pose, PNVector3Unity[] ptsArrayPtr, int ptsCount
+	);
+
+	[DllImport ("__Internal")]
+	[return: MarshalAs (UnmanagedType.I4)]
 	private static extern int PNListMaps (PNResultCallback cb, IntPtr context);
 
 	[DllImport ("__Internal")]
@@ -1455,6 +1638,18 @@ public class LibPlacenote : MonoBehaviour
 	[DllImport ("__Internal")]
 	[return: MarshalAs (UnmanagedType.I4)]
 	private static extern int PNGetAllLandmarks ([In, Out] PNFeaturePointUnity[] lmArrayPtr, int lmSize);
+
+	[DllImport ("__Internal")]
+	[return: MarshalAs (UnmanagedType.I4)]
+	private static extern int PNGetDenseMap ([In, Out] PNFeaturePointUnity[] lmArrayPtr, int lmSize);
+
+	[DllImport ("__Internal")]
+	[return: MarshalAs (UnmanagedType.I4)]
+	private static extern int PNEnableDenseMapping (PNNotifcationCallback cb, IntPtr context);
+
+	[DllImport ("__Internal")]
+	[return: MarshalAs (UnmanagedType.I4)]
+	private static extern int PNDisableDenseMapping ();
 
 	[DllImport ("__Internal")]
 	[return: MarshalAs (UnmanagedType.I4)]

@@ -9,32 +9,31 @@ Prefab:
     m_Modifications: []
     m_RemovedComponents: []
   m_ParentPrefab: {fileID: 0}
-  m_RootGameObject: {fileID: 1271650370769016}
+  m_RootGameObject: {fileID: 1170009386759964}
   m_IsPrefabParent: 1
---- !u!1 &1271650370769016
+--- !u!1 &1170009386759964
 GameObject:
   m_ObjectHideFlags: 0
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 100100000}
   serializedVersion: 5
   m_Component:
-  - component: {fileID: 4969268942342744}
-  - component: {fileID: 114499044807483482}
-  - component: {fileID: 33929142665424960}
-  - component: {fileID: 23574166122694340}
+  - component: {fileID: 4067613631000776}
+  - component: {fileID: 33082211170559766}
+  - component: {fileID: 23782255642011878}
   m_Layer: 0
-  m_Name: PlacenoteMap
+  m_Name: PlacenotePointcloud
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!4 &4969268942342744
+--- !u!4 &4067613631000776
 Transform:
   m_ObjectHideFlags: 1
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 100100000}
-  m_GameObject: {fileID: 1271650370769016}
+  m_GameObject: {fileID: 1170009386759964}
   m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: 0, y: 0, z: 0}
   m_LocalScale: {x: 1, y: 1, z: 1}
@@ -42,12 +41,12 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!23 &23574166122694340
+--- !u!23 &23782255642011878
 MeshRenderer:
   m_ObjectHideFlags: 1
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 100100000}
-  m_GameObject: {fileID: 1271650370769016}
+  m_GameObject: {fileID: 1170009386759964}
   m_Enabled: 1
   m_CastShadows: 1
   m_ReceiveShadows: 1
@@ -74,25 +73,10 @@ MeshRenderer:
   m_SortingLayerID: 0
   m_SortingLayer: 0
   m_SortingOrder: 0
---- !u!33 &33929142665424960
+--- !u!33 &33082211170559766
 MeshFilter:
   m_ObjectHideFlags: 1
   m_PrefabParentObject: {fileID: 0}
   m_PrefabInternal: {fileID: 100100000}
-  m_GameObject: {fileID: 1271650370769016}
+  m_GameObject: {fileID: 1170009386759964}
   m_Mesh: {fileID: 0}
---- !u!114 &114499044807483482
-MonoBehaviour:
-  m_ObjectHideFlags: 1
-  m_PrefabParentObject: {fileID: 0}
-  m_PrefabInternal: {fileID: 100100000}
-  m_GameObject: {fileID: 1271650370769016}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 1dc6d171d179d4740bc550e69a938e46, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  mPtCloudMat: {fileID: 2100000, guid: 66bd9910888c24617939470d60a5b27f, type: 2}
-  mMap: {fileID: 1271650370769016}
-  mPointCloud: {fileID: 1170009386759964, guid: b994d747abbb845cd92cc8c725045a44,
-    type: 2}
