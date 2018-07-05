@@ -30,7 +30,7 @@ public class ShapeList
 }
 
 
-public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener
+public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener, ResumeUploadListener
 {
 	[SerializeField] GameObject mMapSelectedPanel;
 	[SerializeField] GameObject mInitButtonPanel;
@@ -85,6 +85,7 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener
 		StartARKit ();
 		FeaturesVisualizer.EnablePointcloud ();
 		LibPlacenote.Instance.RegisterListener (this);
+		LibPlacenote.Instance.RegisterResumeUploadListener (this);
 		mRadiusSlider.value = 1.0f;
 	}
 
@@ -322,13 +323,10 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener
 		if (mReportDebug) {
 			LibPlacenote.Instance.StartRecordDataset (
 				(completed, faulted, percentage) => {
-					if (completed) {
-						mLabelText.text = "Dataset Upload Complete";
-					} else if (faulted) {
-						mLabelText.text = "Dataset Upload Faulted";
-					} else {
-						mLabelText.text = "Dataset Upload: (" + percentage.ToString ("F2") + "/1.0)";
-					}
+
+					UpdateDatasetLabel(mSaveMapId, completed, faulted, percentage);
+
+
 				});
 			Debug.Log ("Started Debug Report");
 		}
@@ -526,4 +524,28 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener
 			}
 		}
 	}
+
+
+	public void PrevSessionMapUploadStatus (String mapID, bool completed, bool faulted, float percentage) {
+		Debug.Log ("ResumeUpload: PlacenoteSampleView, Uploading map for " + mapID + " with " + percentage.ToString ("F2") + "% left");
+		mLabelText.text = "Uploading map: " + mapID;
+	}
+
+	public void PrevSessionDatasetUploadStatus (String mapID, bool completed, bool faulted, float percentage) {
+		Debug.Log ("ResumeUpload: PlacenoteSampleView, Uploading dataset for " + mapID + " with " + percentage.ToString ("F2") + "% left");
+		UpdateDatasetLabel(mapID, completed, faulted, percentage);
+
+	}
+
+
+	public void UpdateDatasetLabel (String mapID, bool completed, bool faulted, float percentage) {
+		if (completed) {
+			mLabelText.text = "Dataset Upload Complete";
+		} else if (faulted) {
+			mLabelText.text = "Dataset Upload Faulted";
+		} else {
+			mLabelText.text = "Dataset Upload: " + percentage.ToString ("F2") + "/1.0, ID: " + mapID;
+		}
+	}
+
 }

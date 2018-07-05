@@ -385,6 +385,7 @@ public class LibPlacenote : MonoBehaviour
 
 	private static LibPlacenote sInstance;
 	private List<PlacenoteListener> listeners = new List<PlacenoteListener> ();
+	private List<ResumeUploadListener> uploadListeners = new List<ResumeUploadListener>();
 	private string mMapPath;
 	private MappingStatus mPrevStatus = MappingStatus.WAITING;
 	private bool mInitialized = false;
@@ -442,7 +443,6 @@ public class LibPlacenote : MonoBehaviour
 		listeners.Add (listener);
 	}
 
-
 	/// <summary>
 	/// Remove a listener to events published by LibPlacenote
 	/// </summary>
@@ -451,7 +451,24 @@ public class LibPlacenote : MonoBehaviour
 	{
 		listeners.Remove (listener);
 	}
-
+		
+	/// <summary>
+	/// Register a resume upload listener events published by LibPlacenote
+	/// </summary>
+	/// <param name="listener">A listener to be added to the subscriber list.</param>
+	public void RegisterResumeUploadListener (ResumeUploadListener listener)
+	{
+		uploadListeners.Add (listener);
+	}
+		
+	/// <summary>
+	/// Remove a resume upload listener events published by LibPlacenote
+	/// </summary>
+	/// <param name="listener">A listener to be removed to the subscriber list.</param>
+	public void RemoveResumeUploadListener (ResumeUploadListener listener)
+	{
+		uploadListeners.Remove (listener);
+	}
 
 	/// <summary>
 	/// Raises the initialized event that indicates the status of the <see cref="PNInitialize"/> call
@@ -476,6 +493,61 @@ public class LibPlacenote : MonoBehaviour
 	}
 
 	/// <summary>
+	/// Notifies user on updates to an old map upload that has yet to finish <see cref="PNInitialize"/> call
+	/// </summary>
+	/// <param name="resumeStatus">
+	/// Status of the map upload from a  previous session
+	/// </param>
+	/// <param name="context">Context passed from C to capture states required by this function</param>
+	[MonoPInvokeCallback (typeof(PNTransferStatusUnity))]
+	static void OnResumeMapUpload (ref PNTransferStatusUnity resumeStatus, IntPtr context)
+	{
+		PNTransferStatusUnity statusClone = resumeStatus;
+		Debug.Log (String.Format ("ResumeUpload: Unity callback,mapId {0} completed {1} faulted {2} bytesTransferred {3} bytesTotal {4}",
+			resumeStatus.mapId, resumeStatus.completed, resumeStatus.faulted, resumeStatus.bytesTransferred, resumeStatus.bytesTotal)
+		);
+
+		var listeners = Instance.uploadListeners;
+
+		MainThreadTaskQueue.InvokeOnMainThread (() => {
+
+			foreach (var listener in listeners) {
+				listener.PrevSessionMapUploadStatus (statusClone.mapId, statusClone.completed, statusClone.faulted, (float)statusClone.bytesTransferred/statusClone.bytesTotal);
+			}
+
+		});
+	}
+
+
+	/// <summary>
+	/// Notifies user on updates to an old dataset upload that has yet to finish <see cref="PNInitialize"/> call
+	/// </summary>
+	/// <param name="resumeStatus">
+	/// Status of the dataset upload from a  previous session
+	/// </param>
+	/// <param name="context">Context passed from C to capture states required by this function</param>
+	[MonoPInvokeCallback (typeof(PNTransferStatusUnity))]
+	static void OnResumeDatasetUpload (ref PNTransferStatusUnity resumeStatus, IntPtr context)
+	{
+		PNTransferStatusUnity statusClone = resumeStatus;
+		Debug.Log (String.Format ("ResumeUpload: Unity callback, mapId {0} completed {1} faulted {2} bytesTransferred {3} bytesTotal {4}",
+			resumeStatus.mapId, resumeStatus.completed, resumeStatus.faulted, resumeStatus.bytesTransferred, resumeStatus.bytesTotal)
+		);
+
+		var listeners = Instance.uploadListeners;
+
+		MainThreadTaskQueue.InvokeOnMainThread (() => {
+
+			foreach (var listener in listeners) {
+				listener.PrevSessionDatasetUploadStatus (statusClone.mapId, statusClone.completed, statusClone.faulted, (float)statusClone.bytesTransferred/statusClone.bytesTotal);
+			}
+
+		});
+	}
+
+
+
+	/// <summary>
 	/// Initializes the LibPlacenote SDK singleton class.
 	/// </summary>
 	private void Init ()
@@ -492,8 +564,8 @@ public class LibPlacenote : MonoBehaviour
 		initParams.appBasePath = Application.streamingAssetsPath + "/Placenote";
 		initParams.mapPath = Application.persistentDataPath;
 
-        	#if !UNITY_EDITOR
-		PNInitialize (ref initParams, OnInitialized, IntPtr.Zero);
+        #if !UNITY_EDITOR
+		PNInitialize (ref initParams, OnInitialized, IntPtr.Zero, OnResumeMapUpload, OnResumeDatasetUpload);
 		#endif
 	}
 
@@ -1339,7 +1411,7 @@ public class LibPlacenote : MonoBehaviour
 	[DllImport ("__Internal")]
 	[return: MarshalAs (UnmanagedType.I4)]
 	private static extern int PNInitialize (
-		ref PNInitParamsUnity initParams, PNResultCallback cb, IntPtr context
+		ref PNInitParamsUnity initParams, PNResultCallback cb, IntPtr context, PNTransferMapCallback resumeMapCb, PNTransferMapCallback resumeDatasetcb
 	);
 
 	[DllImport ("__Internal")]
