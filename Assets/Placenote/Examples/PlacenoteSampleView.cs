@@ -31,6 +31,7 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener
 	private UnityARImageFrameData mImage = null;
 	private UnityARCamera mARCamera;
 	private bool mARKitInit = false;
+	private float mTimeElapsed = 0;
 
 	//private List<ShapeInfo> shapeInfoList = new List<ShapeInfo> ();
 	//private List<GameObject> shapeObjList = new List<GameObject> ();
@@ -100,7 +101,8 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener
 	// Update is called once per frame
 	void Update ()
 	{
-		if (mFrameUpdated) {
+		mTimeElapsed += Time.deltaTime;
+		if (mFrameUpdated && mTimeElapsed > 1f / 10f) {
 			mFrameUpdated = false;
 			if (mImage == null) {
 				InitARFrameBuffer ();
@@ -109,7 +111,7 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener
 			if (mARCamera.trackingState == ARTrackingState.ARTrackingStateNotAvailable) {
 				// ARKit pose is not yet initialized
 				return;
-			} else if (!mARKitInit && LibPlacenote.Instance.Initialized()) {
+			} else if (!mARKitInit && LibPlacenote.Instance.Initialized ()) {
 				mARKitInit = true;
 				mLabelText.text = "ARKit Initialized";
 			}
@@ -120,6 +122,7 @@ public class PlacenoteSampleView : MonoBehaviour, PlacenoteListener
 			Quaternion arkitQuat = PNUtility.MatrixOps.GetRotation (matrix);
 
 			LibPlacenote.Instance.SendARFrame (mImage, arkitPosition, arkitQuat, mARCamera.videoParams.screenOrientation);
+			mTimeElapsed = 0f;
 		}
 	}
 
